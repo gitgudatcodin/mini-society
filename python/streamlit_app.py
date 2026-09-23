@@ -12,6 +12,7 @@ import csv
 import io
 
 import numpy as np
+import pandas as pd
 import streamlit as st
 
 from mini_society_nn import NNSociety, base_config, PRESETS
@@ -170,6 +171,12 @@ def _network_fig(soc):
     return fig
 
 
+def _trust_frame(ts, **series):
+    """DataFrame with trust belief as the index -- the portable way to set
+    the x-axis of st.line_chart across Streamlit versions."""
+    return pd.DataFrame(series, index=np.round(ts, 2))
+
+
 def _policy_curves(agent, rt):
     """P(cooperate) vs trust belief for a familiar partner: loyal vs after betrayal."""
     ts = np.linspace(0, 1, 21)
@@ -219,12 +226,12 @@ def render_results(soc: NNSociety, label: str):
         m2.metric("Cooperation rate", f"{a.coop_acts / a.games:.1%}" if a.games else "--")
         m3.metric("Partners known", len(a.mem))
         ts, loyal, betrayed, accept = _policy_curves(a, rt)
-        st.line_chart({"move policy, loyal partner": loyal,
-                       "move policy, after betrayal": betrayed},
-                      x=ts, height=260)
+        st.line_chart(_trust_frame(ts, **{"move policy, loyal partner": loyal,
+                                         "move policy, after betrayal": betrayed}),
+                      height=260)
         st.caption("Move policy: P(cooperate) vs trust belief (x-axis 0 to 1). "
                    "A learned conscience cooperates with the trustworthy and punishes betrayal.")
-        st.line_chart({"accept policy": accept}, x=ts, height=200)
+        st.line_chart(_trust_frame(ts, **{"accept policy": accept}), height=200)
         st.caption("Accept policy: P(accept invite) vs trust in the inviter.")
 
     with tab3:
