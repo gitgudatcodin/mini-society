@@ -19,6 +19,10 @@ Just open the HTML file in a browser — no build step, no server, no dependenci
   no other dependencies). Bit-identical RNG to the browser version, so the same seed
   gives the same run. Verified against the JavaScript engine: all per-round stats
   match to <1e-9 over a 20-round test run. See `python/` usage below.
+- `python/streamlit_app.py` — interactive Streamlit lab: presets, parameter overrides,
+  live progress, agent brain inspector, society diary, network view, CSV download.
+  Run with `pip install -r python/requirements.txt && streamlit run python/streamlit_app.py`
+- `python/requirements.txt` — numpy, streamlit, matplotlib
 - `paper/mini-society-paper.pdf` — 18-page writeup: model spec, experiments, findings
 - `paper/paper-draft.md` — paper source (Markdown)
 - `paper/render.py`, `paper/make_figures.py` — paper build scripts
@@ -55,6 +59,21 @@ soc.run(400)
 print(soc.summary())
 # {'rounds': 400, 'coop': 0.999, 'accept': 0.989, ...}
 ```
+
+### Interactive Streamlit lab
+
+For a point-and-click version of the above (no HTML/JS needed):
+
+```bash
+pip install -r python/requirements.txt
+streamlit run python/streamlit_app.py
+```
+
+Pick a scenario preset in the sidebar, tweak the key parameters (seed, population,
+temptation payoff, memory, gossip, reflex), and hit **Run simulation**. You get a live
+cooperation curve while it runs, then four tabs: Overview charts, per-agent **brain
+inspector** (each mind's learned P(cooperate) vs. trust curve), the society diary, and
+the final relationship network — plus one-click CSV download of the per-round stats.
 
 ## Key findings (from the paper)
 

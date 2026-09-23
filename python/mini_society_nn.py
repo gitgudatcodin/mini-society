@@ -464,8 +464,12 @@ class NNSociety:
         if len(self.events) > 400:
             del self.events[:len(self.events) - 400]
 
-    def run(self, n: int, progress: bool = False):
-        """Run n rounds. progress=True prints a status line every 10%."""
+    def run(self, n: int, progress: bool = False, finalize: bool = True):
+        """Run n rounds. progress=True prints a status line every 10%.
+
+        finalize=False skips the end-of-run milestone detection -- useful when
+        driving the loop yourself in chunks (e.g. a Streamlit progress loop).
+        """
         target = self.round + n
         mark = max(1, n // 10)
         done = 0
@@ -476,7 +480,8 @@ class NNSociety:
                 s = self.summary(50)
                 print(f"  round {self.round}/{self.cfg['rounds']}  "
                       f"coop={s['coop']:.1%} accept={s['accept']:.1%}", flush=True)
-        self._milestones()
+        if finalize:
+            self._milestones()
         return self
 
     def _milestones(self):
