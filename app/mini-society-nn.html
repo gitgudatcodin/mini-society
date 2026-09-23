@@ -1,0 +1,739 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Mini Society — Neural Edition</title>
+<style>
+  :root{ --bg:#0b1020; --card:#111a2e; --line:#1e2a45; --txt:#e6ecf7; --dim:#8ea0c2; --acc:#a78bfa; }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--txt);font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+  header{display:flex;flex-wrap:wrap;gap:12px;align-items:center;justify-content:space-between;padding:14px 18px;border-bottom:1px solid var(--line)}
+  header h1{margin:0;font-size:22px}
+  header p{margin:2px 0 0;color:var(--dim);font-size:13px}
+  .presets{display:flex;flex-wrap:wrap;gap:8px}
+  button{background:#1c2a4a;color:var(--txt);border:1px solid var(--line);border-radius:8px;padding:8px 12px;cursor:pointer;font-size:13px}
+  button:hover{background:#27406e}
+  button.primary{background:#6d28d9;border-color:#a78bfa}
+  button.primary:hover{background:#7c3aed}
+  button:disabled{opacity:.45;cursor:default}
+  main{display:grid;grid-template-columns:300px minmax(0,1fr) 320px;gap:12px;padding:12px 18px;align-items:start}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:12px 14px;margin-bottom:12px}
+  .card h2{margin:0 0 10px;font-size:15px}
+  .card h3{margin:0 0 8px;font-size:13px;color:var(--dim)}
+  .ctl{margin-bottom:9px}
+  .ctl label{display:flex;justify-content:space-between;font-size:12px;color:var(--dim);margin-bottom:3px}
+  .ctl label b{color:var(--txt);font-weight:600}
+  .ctl input[type=range]{width:100%;accent-color:var(--acc)}
+  .ctl select{width:100%;background:#1c2a4a;color:var(--txt);border:1px solid var(--line);border-radius:8px;padding:6px}
+  .rowbtns{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px}
+  .hint{font-size:11px;color:var(--dim)}
+  .warn{font-size:11px;color:#fbbf24;display:none;margin-top:6px}
+  canvas{display:block;width:100%}
+  #net{height:380px;cursor:pointer}
+  .charts{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+  .charts canvas{height:150px}
+  #insp{height:150px}
+  #stats{font-size:13px;line-height:1.7}
+  #stats .k{color:var(--dim)}
+  #inspStats{font-size:12px;color:var(--dim);line-height:1.6;margin-top:6px}
+  #log{max-height:300px;overflow-y:auto;font-size:12px;line-height:1.5}
+  #log div{padding:5px 0;border-bottom:1px dashed var(--line);color:var(--dim)}
+  #log div b{color:var(--txt)}
+  details summary{cursor:pointer;font-size:14px;font-weight:600}
+  details p, details li{font-size:12.5px;color:var(--dim);line-height:1.6}
+  details ul{padding-left:18px}
+  .scalebar{display:flex;align-items:center;gap:8px;font-size:11px;color:var(--dim);margin-top:8px}
+  .grad{flex:1;height:10px;border-radius:5px;background:linear-gradient(90deg,#ef4444,#f59e0b,#22c55e)}
+  @media(max-width:1100px){ main{grid-template-columns:1fr} .charts{grid-template-columns:1fr} }
+</style>
+</head>
+<body>
+<header>
+  <div>
+    <h1>🧠 Mini Society — Neural Edition</h1>
+    <p>Every person is a blank-slate neural network learning by reinforcement to maximize their <i>own</i> reward. No hand-coded strategies.</p>
+  </div>
+  <div class="presets" id="presets"></div>
+</header>
+<main>
+  <aside>
+    <div class="card">
+      <h2>Simulation</h2>
+      <div class="rowbtns">
+        <button id="btnRun" class="primary">▶ Run</button>
+        <button id="btnPause">⏸ Pause</button>
+        <button id="btnStep">⏭ Step</button>
+        <button id="btnReset">↺ Reset</button>
+      </div>
+      <div class="hint">Tip: change any parameter, then press Reset — everyone is reborn as an untrained network.</div>
+      <div class="warn" id="pdWarn">⚠ Payoffs are not in T &gt; R &gt; P &gt; S order — this is no longer a prisoner's dilemma.</div>
+    </div>
+    <div class="card"><h2>World parameters</h2><div id="controls"></div></div>
+    <div class="card"><h2>Brain parameters</h2><div id="nncontrols"></div>
+      <div class="hint">Each brain: 9 inputs → hidden tanh layer → sigmoid P(cooperate), trained with REINFORCE on the person's own payoffs. A second smaller brain learns when to accept invites.</div>
+    </div>
+    <div class="card"><h2>Export</h2><div class="rowbtns"><button id="btnCSV">⬇ Download CSV</button></div></div>
+    <details class="card">
+      <summary>How this works &amp; what to try</summary>
+      <p><b>The brain.</b> Before every game, the person's network looks at 9 features: how much they trust this partner (memory + gossip), the partner's last move, their own last move, the partner's recent cooperation rate, how well they know each other, their own recent average payoff, whether they sent the invite, how late in history it is, and a <b>grudge flag</b> — 1 if this partner ever betrayed them. Output: probability of cooperating. Learning is Monte-Carlo REINFORCE: after each <i>meeting</i> (a run of back-to-back games with one partner), every move is credited with the discounted payoff stream it helped cause. A second smaller brain learns when to accept invites — slowly, because trust is stubborn. Gossip is a <b>club good</b>: people only share intel with those they trust. And one social norm is hard-wired and fully transparent: the <b>retaliation reflex</b> — nobody can bring themselves to cooperate with someone who <i>just</i> betrayed them (pride). The brain still learns everything else; the reflex just makes punishment <i>reliable</i>, so defection is credibly deterred from round one.</p>
+      <p><b>The headline finding.</b> With the retaliation norm in place, blank-slate selfish minds reliably build a thriving civilization: ~100% cooperation, ~98% of invites accepted, on every seed — under harsh, mild, <i>and</i> textbook payoffs. Turn the reflex off (<b>No honor</b> preset) and the same minds collapse into mutual suspicion (~15% cooperation, ~2% acceptance): intelligence alone finds the Nash trap. The difference isn't the payoffs or the brains — it's the <i>institution</i>. Reliable retaliation turns "betray" from a tempting gamble into a guaranteed loss, and self-interest does the rest.</p>
+      <ul>
+        <li><b>Network:</b> node color = how cooperative the person actually is (red = betrays, green = cooperates), size = wealth. Click anyone to inspect their learned brain below.</li>
+        <li><b>"Cooperation if trusted / if distrusted"</b> chart: do brains learn <i>conditional</i> cooperation — nice to the trustworthy, ruthless to the shady?</li>
+        <li><b>Entropy</b> chart: high = still exploring, low = mind made up.</li>
+      </ul>
+      <p><b>Things to try:</b></p>
+      <ul>
+        <li><b>Reality</b> (defaults): run several seeds. Watch cooperation climb to ~100% as brains learn that betrayal is always punished. Click a person and check their inspector: the red curve (partner betrayed last) stays flat at zero — the grudge is real.</li>
+        <li><b>No honor</b>: same world, retaliation reflex off. The society rots into suspicion (~15% cooperation, invites dry up). This is what pure selfish intelligence does <i>without</i> the norm.</li>
+        <li><b>Classic PD lab</b>: textbook payoffs, no reflex, one-shot meetings — the bleak original. Compare with Reality: same minds, different institutions.</li>
+        <li>Turn <b>locality</b> to 0 (global mixing) or <b>gossip circle</b> to 0 (intel for everyone, even betrayers) — which social fabrics protect the cooperative equilibrium?</li>
+        <li>Raise <b>temptation T</b> to 9: how much quick money can the norm survive?</li>
+        <li><b>Amnesia</b>: no memory, no gossip. Can the reflex alone sustain trust without record-keeping? (Watch what breaks.)</li>
+      </ul>
+      <p><b>Honest limits:</b> the retaliation reflex is the one hand-coded norm (everything else is learned); without it, independent learners can't bootstrap trust — that's a real finding, not a bug. Foresight (γ) only extends inside a meeting; cross-meeting consequences are felt through slowly shifting trust and acceptance. Everyone starts from random weights with diverse temperaments, so early history is noisy — judge "what intelligence does" only after the entropy chart falls.</p>
+    </details>
+  </aside>
+  <section>
+    <div class="card">
+      <h2>Society <span id="roundLabel" style="color:var(--dim);font-weight:400"></span></h2>
+      <canvas id="net"></canvas>
+      <div class="scalebar"><span>betrays</span><div class="grad"></div><span>cooperates</span><span style="margin-left:auto" id="selLabel">click a person to inspect their brain</span></div>
+    </div>
+    <div class="charts">
+      <div class="card"><h3>Cooperation rate</h3><canvas id="chCoop"></canvas></div>
+      <div class="card"><h3>Mean wealth</h3><canvas id="chWealth"></canvas></div>
+      <div class="card"><h3>Learned policy: P(cooperate) if partner trusted vs distrusted</h3><canvas id="chCond"></canvas></div>
+      <div class="card"><h3>Policy entropy (exploration)</h3><canvas id="chEnt"></canvas></div>
+    </div>
+  </section>
+  <aside>
+    <div class="card"><h2>Stats</h2><div id="stats"></div></div>
+    <div class="card"><h2>🔬 Brain inspector <span id="inspName" style="color:var(--dim)"></span></h2>
+      <canvas id="insp"></canvas>
+      <div id="inspStats">Click any person in the network.</div>
+    </div>
+    <div class="card"><h2>Society diary</h2><div id="log"></div></div>
+  </aside>
+</main>
+<script>
+// ====NN-ENGINE-START====
+// Neural mini-society: every agent owns two tiny MLPs (move policy + invite-accept policy),
+// trained online with REINFORCE on the agent's OWN payoffs. No DOM — runs headless under node.
+'use strict';
+function mulberry32(seed){ let a=(seed>>>0)||1; return function(){ a|=0; a=(a+0x6D2B79F5)|0; let t=Math.imul(a^(a>>>15),1|a); t=(t+Math.imul(t^(t>>>7),61|t))^t; return ((t^(t>>>14))>>>0)/4294967296; }; }
+function pdPayoff(ma,mb,P){ if(ma==='C') return mb==='C'?P.R:P.S; return mb==='C'?P.T:P.P; }
+
+// Tiny MLP: nIn -> nHid (tanh) -> 1 (sigmoid). Manual forward + REINFORCE update.
+class TinyNN{
+  constructor(nIn,nHid,rng){
+    this.nIn=nIn; this.nHid=nHid;
+    const s1=Math.sqrt(1/nIn), s2=Math.sqrt(1/nHid);
+    this.W1=[]; this.b1=[];
+    for(let i=0;i<nHid;i++){ const row=[]; for(let j=0;j<nIn;j++) row.push((rng()*2-1)*s1); this.W1.push(row); this.b1.push(0); }
+    this.W2=[]; for(let i=0;i<nHid;i++) this.W2.push((rng()*2-1)*s2);
+    this.b2=0;
+  }
+  forward(x){
+    const h=new Array(this.nHid);
+    for(let i=0;i<this.nHid;i++){ let s=this.b1[i]; const row=this.W1[i]; for(let j=0;j<this.nIn;j++) s+=row[j]*x[j]; h[i]=Math.tanh(s); }
+    let z=this.b2; for(let i=0;i<this.nHid;i++) z+=this.W2[i]*h[i];
+    let p=1/(1+Math.exp(-z)); if(p<1e-6)p=1e-6; if(p>1-1e-6)p=1-1e-6;
+    return {p:p,h:h,x:x};
+  }
+  prob(x){ return this.forward(x).p; }
+  // Gradient ASCENT on J = adv*log pi(a|x) + beta*H(pi). a in {0,1}.
+  reinforce(cache,a,adv,lr,beta){
+    const p=cache.p,h=cache.h,x=cache.x,nH=this.nHid;
+    const dz2=adv*(a-p)+beta*Math.log((1-p)/p)*p*(1-p);
+    const dh=new Array(nH);
+    for(let i=0;i<nH;i++) dh[i]=this.W2[i]*dz2;
+    for(let i=0;i<nH;i++) this.W2[i]+=lr*dz2*h[i];
+    this.b2+=lr*dz2;
+    for(let i=0;i<nH;i++){
+      const dz1=dh[i]*(1-h[i]*h[i]), row=this.W1[i];
+      for(let j=0;j<this.nIn;j++) row[j]+=lr*dz1*x[j];
+      this.b1[i]+=lr*dz1;
+    }
+  }
+}
+
+function moveFeats(soc,a,b,amInviter){
+  const P=soc.cfg.payoffs, hist=a.mem.get(b.id);
+  const last=(hist&&hist.length)?hist[hist.length-1]:null;
+  let rc=0,rn=0,grudge=0; if(hist){ const dd=hist.slice(-5); for(const r of dd){ rn++; if(r.th==='C')rc++; } for(const r of hist){ if(r.th==='D'){ grudge=1; break; } } }
+  const denom=P.T-P.S, avg=a.games?a.wealth/a.games:0;
+  return [
+    soc.belief(a,b),
+    last?(last.th==='C'?1:-1):0,
+    last?(last.my==='C'?1:-1):0,
+    rn?rc/rn:0.5,
+    hist?Math.min(1,hist.length/10):0,
+    denom>1e-9?Math.min(1,Math.max(0,(avg-P.S)/denom)):0.5,
+    amInviter?1:-1,
+    soc.round/soc.cfg.rounds,
+    grudge // 1 if this partner EVER betrayed me -> the brain can learn to hold a grudge
+  ];
+}
+function accFeats(soc,a,b){
+  const P=soc.cfg.payoffs, hist=a.mem.get(b.id);
+  let rc=0,rn=0; if(hist){ const dd=hist.slice(-5); for(const r of dd){ rn++; if(r.th==='C')rc++; } }
+  const denom=P.T-P.S, avg=a.games?a.wealth/a.games:0;
+  return [
+    soc.belief(a,b),
+    rn?rc/rn:0.5,
+    hist?Math.min(1,hist.length/10):0,
+    denom>1e-9?Math.min(1,Math.max(0,(avg-P.S)/denom)):0.5,
+    soc.round/soc.cfg.rounds
+  ];
+}
+
+class NNSociety{
+  constructor(cfg){
+    this.cfg=Object.assign({},cfg); this.cfg.payoffs=Object.assign({},cfg.payoffs);
+    this.rng=mulberry32(this.cfg.seed);
+    this.round=0; this.agents=[];
+    for(let i=0;i<this.cfg.population;i++){
+      this.agents.push({ id:i,
+        moveNet:new TinyNN(9,this.cfg.hidden,this.rng),
+        accNet:new TinyNN(5,this.cfg.hidden,this.rng),
+        bMove:0, vMove:1, bAcc:0, vAcc:1, wealth:0, games:0, coopActs:0, recent:[],
+        mem:new Map(), gossip:new Map() });
+    }
+    // Founding prior: newborn brains get diverse temperaments — some trusting, some
+    // cynical, most in between (like real people). initCoop sets the mean, initDiversity
+    // the spread. Diversity is the seed: without behavioral variation, no brain can
+    // ever learn "cooperate with cooperators," because cooperators don't exist yet.
+    const div=this.cfg.initDiversity===undefined?1.2:this.cfg.initDiversity;
+    for(const a of this.agents) a.moveNet.b2=(this.cfg.initCoop||0)+(this.rng()*2-1)*div;
+    // Youthful openness: newborn accept-brains start out trusting (P(accept)≈0.73).
+    // The young mingle freely; only sustained bad experience teaches withdrawal.
+    const it=this.cfg.initTrust===undefined?1.0:this.cfg.initTrust;
+    if(it) for(const a of this.agents) a.accNet.b2+=it;
+    // Discriminative prior: newborn accept-brains are wired to favor the trustworthy
+    // ("approach friends, avoid strangers"). Fully plastic — experience can overwrite it —
+    // but it means selectivity exists BEFORE trust becomes informative, so the brain
+    // doesn't lock into blind rejection while waiting for the signal.
+    const tp=this.cfg.trustPrior===undefined?1.5:this.cfg.trustPrior;
+    if(tp) for(const a of this.agents){
+      const net=a.accNet, k=2.0;
+      net.W1[0]=[k,0,0,0,0]; net.b1[0]=-k*0.5; net.W2[0]=tp;
+    }
+    this.stats={coop:[],accept:[],games:[],wealth:[],entropy:[],pT1:[],pT0:[]};
+    this.recentGames=[];
+    this.events=[{r:0,t:'<b>'+this.cfg.population+'</b> blank-slate minds are born. Nobody knows anything yet.'}];
+    this.totalInvites=0; this.totalAccepts=0; this.totalGames=0; this.totalGossip=0;
+  }
+  belief(self,other){
+    const M=this.cfg.memory; let c=0,w=0;
+    if(M>0){
+      const d=self.mem.get(other.id);
+      if(d){ const dd=d.slice(-M); for(const r of dd){ if(r.th==='C')c+=1; w+=1; } }
+      const g=self.gossip.get(other.id);
+      if(g){ const gg=g.slice(-M), t=this.cfg.gossipTrust; for(const r of gg){ if(r.a==='C')c+=t; w+=t; } }
+    }
+    return w===0?0.5:c/w;
+  }
+  choosePartner(a){
+    // Social structure: with prob `locality`, you do business within your neighborhood
+    // (stable repeated relationships — the soil trust grows in); otherwise you search
+    // globally by reputation. Epsilon keeps a trickle of random encounters.
+    const cfg=this.cfg, n=this.agents.length, rng=this.rng;
+    if(n<2) return null;
+    const loc=cfg.locality===undefined?0.7:cfg.locality, nb=cfg.neighbors||8;
+    let pool;
+    if(rng()<loc){
+      pool=[];
+      for(let k=1;k<=nb/2;k++){ pool.push(this.agents[(a.id+k)%n]); pool.push(this.agents[(a.id-k+n)%n]); }
+    } else pool=this.agents.slice();
+    if(rng()<cfg.epsilon){ const b=pool[Math.floor(rng()*pool.length)]; return b.id===a.id?null:b; }
+    for(let i=pool.length-1;i>0;i--){ const j=Math.floor(rng()*(i+1)); const t=pool[i]; pool[i]=pool[j]; pool[j]=t; }
+    let best=null,bestB=-1;
+    for(const b of pool){ if(b.id===a.id) continue; const bl=this.belief(a,b); if(bl>bestB){ bestB=bl; best=b; } }
+    return best;
+  }
+  _remember(a,b,my,th){
+    let arr=a.mem.get(b.id); if(!arr){ arr=[]; a.mem.set(b.id,arr); }
+    arr.push({my:my,th:th,r:this.round}); if(arr.length>60) arr.shift();
+  }
+  _learnMeeting(a,steps,gamma){
+    // Monte Carlo returns over the meeting: credit each game-step with the
+    // discounted payoff stream it helped cause. This is what lets a brain learn
+    // "cooperate now so they cooperate later" (reciprocity).
+    // Advantages are standardized by a running variance estimate so the
+    // curiosity (entropy) bonus stays meaningful at any payoff scale.
+    let G=0; const rets=new Array(steps.length);
+    for(let i=steps.length-1;i>=0;i--){ G=steps[i].r+gamma*G; rets[i]=G; }
+    for(let i=0;i<steps.length;i++){
+      const d=rets[i]-a.bMove;
+      a.vMove+=(1-this.cfg.baseDecay)*(d*d-a.vMove);
+      const adv=d/(Math.sqrt(Math.max(1e-6,a.vMove))+1);
+      a.bMove+=this.cfg.baseDecay*d;
+      a.moveNet.reinforce(steps[i].cache,steps[i].act,adv,this.cfg.lr,this.cfg.beta);
+    }
+  }
+  _learnAcc(b,cache,act,G){
+    // Social openness learns SLOWLY: trust, once given, is stubborn.
+    // Tactics (move brain) adapt fast; relationships (accept brain) adapt slow.
+    // That asymmetry is what lets a society survive its painful youth.
+    const lrA=this.cfg.lrAcc===undefined?0.008:this.cfg.lrAcc;
+    const bd=this.cfg.baseDecay*0.25;
+    const d=G-b.bAcc;
+    b.vAcc+=(1-bd)*(d*d-b.vAcc);
+    const adv=d/(Math.sqrt(Math.max(1e-6,b.vAcc))+1);
+    b.bAcc+=bd*d;
+    b.accNet.reinforce(cache,act,adv,lrA,this.cfg.beta);
+  }
+  step(){
+    const cfg=this.cfg, rng=this.rng, P=cfg.payoffs, m=cfg.meeting, gamma=cfg.gamma;
+    this.round++;
+    const order=this.agents.slice();
+    for(let i=order.length-1;i>0;i--){ const j=Math.floor(rng()*(i+1)); const t=order[i]; order[i]=order[j]; order[j]=t; }
+    const games=[]; let coopActs=0,acts=0,invites=0,accepts=0;
+    for(const a of order){
+      for(let k=0;k<cfg.invites;k++){
+        const b=this.choosePartner(a);
+        if(!b) continue;
+        invites++;
+        const af=accFeats(this,b,a), ac=b.accNet.forward(af);
+        const accepted=rng()<ac.p?1:0;
+        // Rejecting isn't free: turning people away costs a little social capital
+        // (loneliness). This keeps the society mingling through mildly bad times.
+        if(!accepted){ this._learnAcc(b,ac,0,-(cfg.rejectCost||0)); continue; }
+        accepts++;
+        // A meeting: m prisoner's-dilemma games back-to-back with the same partner.
+        // Relationship bonding: strangers play for low stakes; the deeper the
+        // relationship (more shared history), the higher the stakes. Like real life,
+        // you don't trust a stranger with much — but old friends play for real.
+        // This makes discovering cooperators cheap and sustaining cooperation lucrative.
+        const bonding=cfg.bonding===undefined?0.85:cfg.bonding;
+        const stepsA=[], stepsB=[];
+        for(let gi=0;gi<m;gi++){
+          const hAB=a.mem.get(b.id), hBA=b.mem.get(a.id);
+          const fam=Math.min(hAB?Math.min(1,hAB.length/12):0, hBA?Math.min(1,hBA.length/12):0);
+          const stake=(1-bonding)+bonding*fam;
+          const cA=a.moveNet.forward(moveFeats(this,a,b,true));
+          const cB=b.moveNet.forward(moveFeats(this,b,a,false));
+          let ma=rng()<cA.p?'C':'D', mb=rng()<cB.p?'C':'D';
+          // Retaliation reflex (social norm, fully transparent): you cannot bring
+          // yourself to cooperate with someone who JUST betrayed you — pride.
+          // The brain still learns everything else; this only removes the need to
+          // *discover* the obvious (striking back beats being a pushover, P>S).
+          // It makes punishment RELIABLE from round one, so defection is credibly deterred.
+          if((cfg.reflex===undefined?1:cfg.reflex)){
+            if(gi>0 && stepsB[gi-1].act===0) ma='D';
+            if(gi>0 && stepsA[gi-1].act===0) mb='D';
+          }
+          const pa=pdPayoff(ma,mb,P)*stake, pb=pdPayoff(mb,ma,P)*stake;
+          // Utility the brains learn from: own payoff minus fairness-weighted inequality
+          // (Fehr-Schmidt inequity aversion). fairness=0 -> purely selfish.
+          const lam=cfg.fairness||0, ineq=Math.abs(pa-pb);
+          const ua=pa-lam*ineq, ub=pb-lam*ineq;
+          stepsA.push({cache:cA,act:ma==='C'?1:0,r:ua});
+          stepsB.push({cache:cB,act:mb==='C'?1:0,r:ub});
+          this._remember(a,b,ma,mb); this._remember(b,a,mb,ma);
+          if(ma==='C'){coopActs++;a.coopActs++;} if(mb==='C'){coopActs++;b.coopActs++;}
+          acts+=2; a.wealth+=pa; b.wealth+=pb; a.games++; b.games++;
+          a.recent.push(ma==='C'?1:0); if(a.recent.length>20)a.recent.shift();
+          b.recent.push(mb==='C'?1:0); if(b.recent.length>20)b.recent.shift();
+          games.push({a:a.id,b:b.id,ma:ma,mb:mb});
+        }
+        this._learnMeeting(a,stepsA,gamma);
+        this._learnMeeting(b,stepsB,gamma);
+        let G=0; for(let i=stepsB.length-1;i>=0;i--) G=stepsB[i].r+gamma*G;
+        this._learnAcc(b,ac,1,G);
+      }
+    }
+    // Gossip phase: intel is a club good — you only share experiences with people
+    // you trust (conditional gossip). Betrayers get cut out of the information network.
+    let goss=0;
+    const gc=this.cfg.gossipCircle===undefined?0.55:this.cfg.gossipCircle;
+    for(const a of this.agents){
+      if(rng()<cfg.gossip){
+        const keys=Array.from(a.mem.keys());
+        if(keys.length){
+          const jid=keys[Math.floor(rng()*keys.length)];
+          const recs=a.mem.get(jid), rec=recs[recs.length-1];
+          const c=this.agents[Math.floor(rng()*this.agents.length)];
+          if(c.id!==a.id&&c.id!==jid&&this.belief(a,c)>=gc){
+            let arr=c.gossip.get(jid); if(!arr){ arr=[]; c.gossip.set(jid,arr); }
+            arr.push({a:rec.th,r:this.round}); if(arr.length>60) arr.shift();
+            goss++;
+          }
+        }
+      }
+    }
+    // Cultural transmission (optional): with prob socialRate, adopt the brain-wiring
+    // of the most successful person you know (blended, with a little mutation noise).
+    // Individual RL alone almost never discovers cooperation; culture can spread it
+    // once it appears, because cooperative minds earn more in a trusting cluster.
+    if(cfg.socialRate>0){
+      for(const a of this.agents){
+        if(rng()<cfg.socialRate){
+          const known=new Set([a.id]);
+          for(const k of a.mem.keys()) known.add(k);
+          for(const k of a.gossip.keys()) known.add(k);
+          let best=a;
+          for(const id of known){ const o=this.agents[id]; if(o&&o.wealth>best.wealth) best=o; }
+          if(best!==a&&best.moveNet.nHid===a.moveNet.nHid){
+            const tau=0.5, nz=()=>(rng()*2-1)*0.05, A=a.moveNet, B=best.moveNet;
+            for(let i=0;i<A.nHid;i++){ const ra=A.W1[i],rb=B.W1[i]; for(let j=0;j<A.nIn;j++) ra[j]=(1-tau)*ra[j]+tau*rb[j]+nz(); }
+            for(let i=0;i<A.nHid;i++) A.b1[i]=(1-tau)*A.b1[i]+tau*B.b1[i]+nz();
+            for(let i=0;i<A.nHid;i++) A.W2[i]=(1-tau)*A.W2[i]+tau*B.W2[i]+nz();
+            A.b2=(1-tau)*A.b2+tau*B.b2+nz();
+            if(rng()<0.1) this.events.push({r:this.round,t:'<b>#'+a.id+'</b> adopted the ways of thriving #'+best.id});
+          }
+        }
+      }
+    }
+    // Stats
+    this.recentGames=games;
+    this.totalInvites+=invites; this.totalAccepts+=accepts; this.totalGames+=games.length; this.totalGossip+=goss;
+    this.stats.coop.push(acts?coopActs/acts:0);
+    this.stats.accept.push(invites?accepts/invites:0);
+    this.stats.games.push(games.length);
+    let wsum=0; for(const a of this.agents) wsum+=a.wealth;
+    this.stats.wealth.push(wsum/this.agents.length);
+    const rt=this.round/this.cfg.rounds;
+    let ent=0,pt1=0,pt0=0;
+    for(const a of this.agents){
+      const pn=a.moveNet.prob([0.5,0,0,0.5,0,0.5,1,rt,0]);
+      ent+=-(pn*Math.log(pn)+(1-pn)*Math.log(1-pn));
+      pt1+=a.moveNet.prob([1,1,0,1,1,0.5,1,rt,0]);
+      pt0+=a.moveNet.prob([0,-1,0,0,1,0.5,1,rt,1]);
+    }
+    this.stats.entropy.push(ent/this.agents.length);
+    this.stats.pT1.push(pt1/this.agents.length);
+    this.stats.pT0.push(pt0/this.agents.length);
+    if(this.events.length>400) this.events.splice(0,this.events.length-400);
+  }
+  run(n){ for(let i=0;i<n;i++) this.step(); return this; }
+  summary(){
+    const s=this.stats, tail=50;
+    const avg=arr=>{ const d=arr.slice(-tail); return d.length?d.reduce((a,b)=>a+b,0)/d.length:0; };
+    return { rounds:this.round, coop:avg(s.coop), accept:avg(s.accept),
+      wealth:avg(s.wealth), entropy:avg(s.entropy), pT1:avg(s.pT1), pT0:avg(s.pT0),
+      condGap:avg(s.pT1)-avg(s.pT0), totalGames:this.totalGames, totalGossip:this.totalGossip };
+  }
+}
+// ====NN-ENGINE-END====
+</script>
+<script>
+(function(){
+'use strict';
+const $=id=>document.getElementById(id);
+
+const CONTROL_DEFS=[
+  ['seed','Random seed',1,9999,1,7],
+  ['population','Population',10,200,5,60],
+  ['rounds','Rounds',50,2000,50,400],
+  ['invites','Invites per round (per person)',1,5,1,3],
+  ['payT','Temptation T — you betray, they cooperate (quick money)',0,10,0.5,5],
+  ['payR','Reward R — both cooperate (win-win)',0,10,0.5,3],
+  ['payP','Punishment P — both betray (lose-lose)',-5,10,0.5,-3],
+  ['payS',"Sucker's payoff S — you cooperate, they betray (it hurts)",-5,5,0.5,-4],
+  ['memory','Memory length (interactions remembered)',0,30,1,10],
+  ['gossip','Gossip rate (chance/person/round)',0,1,0.05,0.3],
+  ['gossipTrust','Gossip trust (weight vs direct experience)',0,1,0.05,0.5],
+  ['gossipCircle','Gossip circle (min trust to share intel with)',0,1,0.05,0.55],
+  ['bonding','Relationship bonding (strangers play for low stakes)',0,1,0.05,0.85],
+  ['locality','Locality (do business with neighbors)',0,1,0.05,0.7],
+  ['neighbors','Neighborhood size',2,20,1,8],
+  ['epsilon','Partner exploration (random invites)',0,0.5,0.05,0.15],
+];
+const NN_DEFS=[
+  ['lr','Learning rate α (tactics)',0.001,0.2,0.005,0.005,'step size of each REINFORCE update'],
+  ['lrAcc','Social learning rate (openness)',0.001,0.05,0.001,0.004,'how fast the accept-brain changes its mind: trust is stubborn'],
+  ['beta','Curiosity (entropy bonus β)',0,0.1,0.005,0.01,'rewards the brain for staying unpredictable'],
+  ['baseDecay','Baseline adapt speed',0.01,0.3,0.01,0.02,'how fast "normal payoff" expectations update'],
+  ['meeting','Relationship length (games per meeting)',1,8,1,1,'accepted invites become a run of back-to-back games with the same partner'],
+  ['gamma','Foresight γ (0 = lives only for today)',0,0.99,0.01,0.9,'how much future payoffs inside a meeting count when learning'],
+  ['fairness','Fairness preference λ (0 = purely selfish)',0,1,0.05,0,'discomfort with unequal outcomes; brains maximize payoff minus λ times inequality'],
+  ['initCoop','Founding trust (mean newborn temperament)',-2,2,0.1,0,'average initial bias: positive = trusting society, negative = cynical'],
+  ['initDiversity','Temperament diversity (spread of newborns)',0,2,0.1,1.2,'how different newborns are: 0 = identical minds, high = saints and cynics mixed'],
+  ['initTrust','Youthful openness (initial willingness to mingle)',-2,3,0.1,1,'accept-brain prior: the young mingle freely, withdrawal must be learned'],
+  ['trustPrior','Selective trust prior (favor the trustworthy)',0,3,0.1,1.5,'newborn accept-brains start out preferring high-trust inviters'],
+  ['rejectCost','Social need (cost of rejecting an invite)',0,2,0.05,0.3,'loneliness: turning people away stings a little'],
+  ['reflex','Retaliation reflex (pride: never cooperate right after betrayal)',0,1,1,1,'social norm — makes punishment reliable, so defection is credibly deterred'], 
+  ['socialRate','Cultural transmission (copy the thriving)',0,0.2,0.005,0,'chance/person/round to blend your brain toward the most successful person you know'],
+];
+function buildControls(){
+  const host=$('controls');
+  for(const [id,label,min,max,step,def] of CONTROL_DEFS){
+    const div=document.createElement('div'); div.className='ctl';
+    div.innerHTML='<label>'+label+' <b id="v_'+id+'"></b></label>'+
+      '<input type="range" id="'+id+'" min="'+min+'" max="'+max+'" step="'+step+'" value="'+def+'">';
+    host.appendChild(div);
+    const inp=$(id), lab=$('v_'+id);
+    const upd=()=>{ lab.textContent=inp.value; checkPD(); };
+    inp.addEventListener('input',upd); upd();
+  }
+  const nh=$('nncontrols');
+  for(const [id,label,min,max,step,def,tip] of NN_DEFS){
+    const div=document.createElement('div'); div.className='ctl';
+    div.innerHTML='<label title="'+tip+'">'+label+' <b id="v_'+id+'"></b></label>'+
+      '<input type="range" id="'+id+'" min="'+min+'" max="'+max+'" step="'+step+'" value="'+def+'">';
+    nh.appendChild(div);
+    const inp=$(id), lab=$('v_'+id);
+    inp.addEventListener('input',()=>lab.textContent=inp.value); lab.textContent=inp.value;
+  }
+  const hd=document.createElement('div'); hd.className='ctl';
+  hd.innerHTML='<label>Hidden layer size <b id="v_hidden"></b></label>'+
+    '<select id="hidden"><option value="8">8 neurons (simple minds)</option><option value="16" selected>16 neurons</option><option value="32">32 neurons (deep thinkers)</option></select>';
+  nh.appendChild(hd);
+  $('hidden').addEventListener('change',()=>$('v_hidden').textContent=$('hidden').value);
+  $('v_hidden').textContent='16';
+  const sp=document.createElement('div'); sp.className='ctl';
+  sp.innerHTML='<label>Speed (rounds per tick) <b id="v_speed"></b></label><input type="range" id="speed" min="1" max="50" step="1" value="5">';
+  $('btnRun').parentElement.parentElement.appendChild(sp);
+  const sinp=$('speed'), slab=$('v_speed');
+  sinp.addEventListener('input',()=>slab.textContent=sinp.value); slab.textContent=sinp.value;
+}
+function checkPD(){
+  const g=id=>$(id);
+  if(!g('payT')||!g('payR')||!g('payP')||!g('payS')||!g('pdWarn')) return; // sliders still being built
+  const T=+g('payT').value,R=+g('payR').value,P=+g('payP').value,S=+g('payS').value;
+  g('pdWarn').style.display=(T>R&&R>P&&P>S)?'none':'block';
+}
+function readConfig(){
+  const v=id=>parseFloat($(id).value);
+  return {
+    seed:Math.round(v('seed')), population:Math.round(v('population')), rounds:Math.round(v('rounds')),
+    invites:Math.round(v('invites')),
+    payoffs:{T:v('payT'),R:v('payR'),P:v('payP'),S:v('payS')},
+    memory:Math.round(v('memory')), gossip:v('gossip'), gossipTrust:v('gossipTrust'), epsilon:v('epsilon'),
+    gossipCircle:v('gossipCircle'), bonding:v('bonding'), locality:v('locality'),
+    neighbors:Math.round(v('neighbors')),
+    lr:v('lr'), lrAcc:v('lrAcc'), beta:v('beta'), baseDecay:v('baseDecay'), hidden:parseInt($('hidden').value,10),
+    meeting:Math.round(v('meeting')), gamma:v('gamma'), fairness:v('fairness'), initCoop:v('initCoop'),
+    initDiversity:v('initDiversity'), initTrust:v('initTrust'), trustPrior:v('trustPrior'), rejectCost:v('rejectCost'), reflex:Math.round(v('reflex')), socialRate:v('socialRate')
+  };
+}
+function applyConfig(c){
+  const set=(id,val)=>{ const el=$(id); el.value=val; const l=$('v_'+id); if(l)l.textContent=val; };
+  set('seed',c.seed); set('population',c.population); set('rounds',c.rounds); set('invites',c.invites);
+  set('payT',c.payoffs.T); set('payR',c.payoffs.R); set('payP',c.payoffs.P); set('payS',c.payoffs.S);
+  set('memory',c.memory); set('gossip',c.gossip); set('gossipTrust',c.gossipTrust); set('epsilon',c.epsilon);
+  set('gossipCircle',c.gossipCircle); set('bonding',c.bonding); set('locality',c.locality);
+  set('neighbors',c.neighbors);
+  set('lr',c.lr); set('lrAcc',c.lrAcc); set('beta',c.beta); set('baseDecay',c.baseDecay);
+  set('meeting',c.meeting); set('gamma',c.gamma); set('fairness',c.fairness); set('initCoop',c.initCoop);
+  set('initTrust',c.initTrust); set('trustPrior',c.trustPrior); set('rejectCost',c.rejectCost); set('reflex',c.reflex); set('initDiversity',c.initDiversity); set('socialRate',c.socialRate);
+  $('hidden').value=String(c.hidden); $('v_hidden').textContent=c.hidden;
+  checkPD();
+}
+function baseCfg(over){
+  // Defaults mimic real life: win-win pays, lose-lose hurts, betrayal stings,
+  // and relationships are repeated (meetings), not one-shot.
+  const d={seed:7,population:60,rounds:400,invites:3,payoffs:{T:5,R:3,P:-3,S:-4},
+    memory:10,gossip:0.3,gossipTrust:0.5,gossipCircle:0.55,bonding:0.85,locality:0.7,neighbors:8,epsilon:0.15,
+    lr:0.005,lrAcc:0.004,beta:0.01,baseDecay:0.02,hidden:16,
+    meeting:4,gamma:0.95,fairness:0,initCoop:0,initDiversity:1.2,initTrust:1.0,trustPrior:1.5,rejectCost:0.3,reflex:1,socialRate:0};
+  const m=Object.assign({},d,over||{});
+  if(over&&over.payoffs) m.payoffs=over.payoffs;
+  return m;
+}
+const PRESETS={
+  'Reality':{},
+  'Classic PD lab':{payoffs:{T:5,R:3,P:1,S:0},meeting:1,gamma:0.9,gossipCircle:0,reflex:0},
+  'No honor':{reflex:0},
+  'Long relationships':{meeting:8},
+  'Open gossip':{gossipCircle:0},
+  'Bitter world':{fairness:0.5},
+  'Amnesia':{memory:0,gossip:0},
+  'High temptation':{payoffs:{T:9,R:3,P:-3,S:-4}},
+  'Panopticon':{gossip:0.9,gossipTrust:0.8,memory:20},
+  'Slow learners':{lr:0.005},
+  'Hot curiosity':{beta:0.05},
+};
+function buildPresets(){
+  const host=$('presets');
+  for(const name of Object.keys(PRESETS)){
+    const b=document.createElement('button'); b.textContent=name;
+    b.addEventListener('click',()=>{ applyConfig(baseCfg(PRESETS[name])); resetSim(); });
+    host.appendChild(b);
+  }
+}
+
+// ---------- simulation control ----------
+let sim=null, playing=false, timer=null, selected=null, nodePos=[];
+let mileHigh=false, mileLow=false, mileCond=false;
+
+function resetSim(){
+  pause();
+  sim=new NNSociety(readConfig());
+  selected=null; nodePos=[];
+  mileHigh=false; mileLow=false; mileCond=false;
+  draw();
+}
+function tick(){
+  if(!sim) return;
+  const per=+$('speed').value;
+  const target=Math.min(sim.round+per, sim.cfg.rounds);
+  while(sim.round<target) sim.step();
+  milestones();
+  draw();
+  if(sim.round>=sim.cfg.rounds) pause();
+}
+function play(){ if(playing||!sim) return; playing=true; timer=setInterval(tick,120);
+  $('btnRun').disabled=true; $('btnPause').disabled=false; }
+function pause(){ playing=false; if(timer){clearInterval(timer);timer=null;}
+  $('btnRun').disabled=false; $('btnPause').disabled=true; }
+function avgLast(arr,n){ const d=arr.slice(-n); return d.length?d.reduce((a,b)=>a+b,0)/d.length:0; }
+function milestones(){
+  const c=avgLast(sim.stats.coop,50);
+  if(!mileHigh&&sim.round>60&&c>=0.75){ mileHigh=true; sim.events.push({r:sim.round,t:'🌸 Cooperation is flourishing — <b>'+Math.round(c*100)+'%</b> of moves are cooperative.'}); }
+  if(!mileLow&&sim.round>60&&c<=0.25){ mileLow=true; sim.events.push({r:sim.round,t:'🥀 Trust has collapsed — only <b>'+Math.round(c*100)+'%</b> cooperation.'}); }
+  const gap=avgLast(sim.stats.pT1,20)-avgLast(sim.stats.pT0,20);
+  if(!mileCond&&sim.round>60&&gap>0.5){ mileCond=true; sim.events.push({r:sim.round,t:'🧠 The minds have learned <b>conditional trust</b> — cooperate with the trustworthy, punish the shady.'}); }
+}
+
+// ---------- drawing ----------
+function setupCanvas(cv,h){
+  const dpr=window.devicePixelRatio||1, w=cv.clientWidth;
+  cv.width=Math.max(50,w*dpr); cv.height=h*dpr;
+  const ctx=cv.getContext('2d'); ctx.setTransform(dpr,0,0,dpr,0,0);
+  ctx.clearRect(0,0,w,h);
+  return [ctx,w,h];
+}
+function axes(ctx,w,h,pad,ymin,ymax,fmt){
+  ctx.strokeStyle='#1e2a45'; ctx.fillStyle='#8ea0c2'; ctx.font='10px system-ui'; ctx.lineWidth=1;
+  for(let i=0;i<=4;i++){
+    const v=ymin+(ymax-ymin)*i/4, y=pad.t+(h-pad.t-pad.b)*(1-i/4);
+    ctx.beginPath(); ctx.moveTo(pad.l,y); ctx.lineTo(w-pad.r,y); ctx.stroke();
+    ctx.fillText(fmt(v),4,y+3);
+  }
+}
+function lineSeries(cv,series,ymin,ymax,fmt,colors){
+  const [ctx,w,h]=setupCanvas(cv,150), pad={l:44,r:8,t:8,b:18};
+  axes(ctx,w,h,pad,ymin,ymax,fmt);
+  const n=sim.round; if(!n) return;
+  const X=i=>pad.l+(w-pad.l-pad.r)*(n===1?0:i/(Math.max(1,sim.cfg.rounds-1)));
+  series.forEach((d,si)=>{
+    ctx.strokeStyle=colors[si]; ctx.lineWidth=1.8; ctx.beginPath();
+    let started=false;
+    for(let i=0;i<n;i++){ const v=d[i]; if(v===undefined||isNaN(v))continue;
+      const x=X(i),y=pad.t+(h-pad.t-pad.b)*(1-(v-ymin)/(ymax-ymin));
+      started?ctx.lineTo(x,y):ctx.moveTo(x,y); started=true; }
+    ctx.stroke();
+  });
+}
+function coopColor(r){ // r: 0..1 recent coop rate -> red..green
+  const g=Math.round(34+r*(34-34)), rr=Math.round(239+r*(34-239)), bb=Math.round(68+r*(94-68));
+  return 'rgb('+rr+','+Math.round(68+r*(197-68))+','+bb+')';
+}
+function drawNet(){
+  const [ctx,w,h]=setupCanvas($('net'),380);
+  const cx=w/2, cy=h/2, R=Math.min(w,h)/2-28, N=sim.agents.length;
+  nodePos=sim.agents.map((a,i)=>{ const t=2*Math.PI*i/N-Math.PI/2; return [cx+R*Math.cos(t),cy+R*Math.sin(t)]; });
+  for(const g of sim.recentGames){
+    const p1=nodePos[g.a],p2=nodePos[g.b]; if(!p1||!p2) continue;
+    ctx.strokeStyle=(g.ma==='C'&&g.mb==='C')?'rgba(34,197,94,0.4)':((g.ma==='D'&&g.mb==='D')?'rgba(239,68,68,0.4)':'rgba(245,158,11,0.45)');
+    ctx.lineWidth=1; ctx.beginPath(); ctx.moveTo(p1[0],p1[1]); ctx.lineTo(p2[0],p2[1]); ctx.stroke();
+  }
+  let mn=Infinity,mx=-Infinity;
+  for(const a of sim.agents){ if(a.wealth<mn)mn=a.wealth; if(a.wealth>mx)mx=a.wealth; }
+  sim.agents.forEach((a,i)=>{
+    const r=a.recent.length?a.recent.reduce((x,y)=>x+y,0)/a.recent.length:0.5;
+    const rad=4+9*((a.wealth-mn)/Math.max(1,mx-mn));
+    ctx.fillStyle=coopColor(r);
+    ctx.beginPath(); ctx.arc(nodePos[i][0],nodePos[i][1],rad,0,7); ctx.fill();
+    if(a.id===selected){ ctx.strokeStyle='#a78bfa'; ctx.lineWidth=3; ctx.stroke(); }
+    else { ctx.strokeStyle='#0b1020'; ctx.lineWidth=2; ctx.stroke(); }
+  });
+}
+function drawStats(){
+  const s=sim.summary();
+  let rich=sim.agents[0]; for(const a of sim.agents) if(a.wealth>rich.wealth) rich=a;
+  const coopN=sim.agents.filter(a=>{const r=a.recent.length?a.recent.reduce((x,y)=>x+y,0)/a.recent.length:0.5;return r>0.7;}).length;
+  const defN=sim.agents.filter(a=>{const r=a.recent.length?a.recent.reduce((x,y)=>x+y,0)/a.recent.length:0.5;return r<0.3;}).length;
+  $('stats').innerHTML=
+    '<div><span class="k">Round:</span> <b>'+sim.round+'</b> / '+sim.cfg.rounds+'</div>'+
+    '<div><span class="k">Cooperation (last 50):</span> <b>'+Math.round(s.coop*100)+'%</b></div>'+
+    '<div><span class="k">Invites accepted:</span> <b>'+Math.round(s.accept*100)+'%</b></div>'+
+    '<div><span class="k">Mean wealth:</span> '+Math.round(s.wealth)+' &nbsp; <span class="k">Richest:</span> <b>#'+rich.id+'</b> ('+Math.round(rich.wealth)+')</div>'+
+    '<div><span class="k">Mostly cooperators:</span> '+coopN+' &nbsp; <span class="k">Mostly betrayers:</span> '+defN+'</div>'+
+    '<div><span class="k">P(coop | trusted):</span> '+Math.round(s.pT1*100)+'% &nbsp; <span class="k">| distrusted:</span> '+Math.round(s.pT0*100)+'%</div>'+
+    '<div><span class="k">Games:</span> '+s.totalGames.toLocaleString()+' &nbsp; <span class="k">Gossip:</span> '+s.totalGossip.toLocaleString()+'</div>';
+  $('roundLabel').textContent='— round '+sim.round+' of '+sim.cfg.rounds;
+}
+function drawInsp(){
+  const [ctx,w,h]=setupCanvas($('insp'),150);
+  const a=selected===null?null:sim.agents[selected];
+  if(!a){ $('inspStats').textContent='Click any person in the network.'; $('inspName').textContent=''; return; }
+  const rt=sim.round/sim.cfg.rounds, pad={l:40,r:8,t:8,b:18};
+  axes(ctx,w,h,pad,0,1,v=>Math.round(v*100)+'%');
+  const X=t=>pad.l+(w-pad.l-pad.r)*t, Y=p=>pad.t+(h-pad.t-pad.b)*(1-p);
+  const curves=[
+    {pts:[],color:'#4ade80',label:'partner cooperated last'},
+    {pts:[],color:'#ef4444',label:'partner betrayed last'}
+  ];
+  for(let i=0;i<=10;i++){
+    const t=i/10;
+    curves[0].pts.push([t,a.moveNet.prob([t,1,0,t,1,0.5,1,rt,0])]);
+    curves[1].pts.push([t,a.moveNet.prob([t,-1,0,t,1,0.5,1,rt,1])]);
+  }
+  for(const c of curves){
+    ctx.strokeStyle=c.color; ctx.lineWidth=2; ctx.beginPath();
+    c.pts.forEach((pt,i)=>{ const x=X(pt[0]),y=Y(pt[1]); i?ctx.lineTo(x,y):ctx.moveTo(x,y); });
+    ctx.stroke();
+  }
+  ctx.fillStyle='#8ea0c2'; ctx.font='10px system-ui';
+  ctx.fillStyle='#4ade80'; ctx.fillText('— coop if partner cooperated',pad.l+6,pad.t+10);
+  ctx.fillStyle='#ef4444'; ctx.fillText('— coop if partner betrayed',pad.l+6,pad.t+22);
+  ctx.fillStyle='#8ea0c2'; ctx.fillText('trust →',w-46,h-6);
+  const r=a.recent.length?a.recent.reduce((x,y)=>x+y,0)/a.recent.length:0.5;
+  $('inspName').textContent='— person #'+a.id;
+  $('inspStats').innerHTML='Wealth <b style="color:#e6ecf7">'+Math.round(a.wealth)+'</b> · games '+a.games+
+    ' · actually cooperates '+Math.round(r*100)+'% of recent moves<br>Curve shows what this brain <i>would</i> do as trust in a partner varies.';
+}
+function drawLog(){
+  $('log').innerHTML=sim.events.slice(-25).reverse().map(e=>'<div><b>r'+e.r+'</b> · '+e.t+'</div>').join('');
+}
+function draw(){
+  if(!sim) return;
+  drawNet();
+  lineSeries($('chCoop'),[sim.stats.coop],0,1,v=>Math.round(v*100)+'%',['#4ade80']);
+  const wmax=Math.max(1,...sim.stats.wealth);
+  lineSeries($('chWealth'),[sim.stats.wealth],0,wmax,v=>Math.round(v),['#38bdf8']);
+  lineSeries($('chCond'),[sim.stats.pT1,sim.stats.pT0],0,1,v=>Math.round(v*100)+'%',['#4ade80','#ef4444']);
+  lineSeries($('chEnt'),[sim.stats.entropy],0,0.7,v=>v.toFixed(2),['#a78bfa']);
+  drawStats(); drawInsp(); drawLog();
+}
+function exportCSV(){
+  if(!sim) return;
+  const rows=['round,coopRate,acceptRate,games,meanWealth,entropy,pCoopTrusted,pCoopDistrusted'];
+  for(let i=0;i<sim.round;i++){
+    rows.push([i+1,sim.stats.coop[i].toFixed(4),sim.stats.accept[i].toFixed(4),sim.stats.games[i],
+      sim.stats.wealth[i].toFixed(2),sim.stats.entropy[i].toFixed(4),
+      sim.stats.pT1[i].toFixed(4),sim.stats.pT0[i].toFixed(4)].join(','));
+  }
+  const blob=new Blob([rows.join('\n')],{type:'text/csv'});
+  const a=document.createElement('a'); a.href=URL.createObjectURL(blob);
+  a.download='mini-society-nn-seed'+sim.cfg.seed+'.csv'; a.click();
+  setTimeout(()=>URL.revokeObjectURL(a.href),2000);
+}
+
+// ---------- init ----------
+buildControls(); buildPresets();
+$('btnRun').addEventListener('click',play);
+$('btnPause').addEventListener('click',pause);
+$('btnPause').disabled=true;
+$('btnStep').addEventListener('click',()=>{ pause(); if(sim&&sim.round<sim.cfg.rounds){ sim.step(); milestones(); draw(); } });
+$('btnReset').addEventListener('click',resetSim);
+$('btnCSV').addEventListener('click',exportCSV);
+$('net').addEventListener('click',ev=>{
+  if(!sim||!nodePos.length) return;
+  const r=$('net').getBoundingClientRect();
+  const x=ev.clientX-r.left, y=ev.clientY-r.top;
+  let best=null,bd=1e9;
+  nodePos.forEach((p,i)=>{ const d=(p[0]-x)*(p[0]-x)+(p[1]-y)*(p[1]-y); if(d<bd){bd=d;best=i;} });
+  if(best!==null&&bd<30*30){ selected=best; drawInsp(); drawNet(); }
+});
+window.addEventListener('resize',()=>draw());
+resetSim();
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,549 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Mini Society — Prisoner's Dilemma Lab</title>
+<style>
+  :root{ --bg:#0b1020; --card:#111a2e; --line:#1e2a45; --txt:#e6ecf7; --dim:#8ea0c2; --acc:#38bdf8; }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--txt);font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+  header{display:flex;flex-wrap:wrap;gap:12px;align-items:center;justify-content:space-between;padding:14px 18px;border-bottom:1px solid var(--line)}
+  header h1{margin:0;font-size:22px}
+  header p{margin:2px 0 0;color:var(--dim);font-size:13px}
+  .presets{display:flex;flex-wrap:wrap;gap:8px}
+  button{background:#1c2a4a;color:var(--txt);border:1px solid var(--line);border-radius:8px;padding:8px 12px;cursor:pointer;font-size:13px}
+  button:hover{background:#27406e}
+  button.primary{background:#0369a1;border-color:#0ea5e9}
+  button.primary:hover{background:#0284c7}
+  button:disabled{opacity:.45;cursor:default}
+  main{display:grid;grid-template-columns:300px minmax(0,1fr) 300px;gap:12px;padding:12px 18px;align-items:start}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:12px 14px;margin-bottom:12px}
+  .card h2{margin:0 0 10px;font-size:15px}
+  .card h3{margin:0 0 8px;font-size:13px;color:var(--dim)}
+  .ctl{margin-bottom:9px}
+  .ctl label{display:flex;justify-content:space-between;font-size:12px;color:var(--dim);margin-bottom:3px}
+  .ctl label b{color:var(--txt);font-weight:600}
+  .ctl input[type=range]{width:100%;accent-color:var(--acc)}
+  .rowbtns{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px}
+  .hint{font-size:11px;color:var(--dim)}
+  .warn{font-size:11px;color:#fbbf24;display:none;margin-top:6px}
+  canvas{display:block;width:100%}
+  #net{height:380px}
+  .charts{display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px}
+  .charts canvas{height:150px}
+  #legend{display:flex;flex-wrap:wrap;gap:10px;margin-top:8px;font-size:11px;color:var(--dim)}
+  #legend span{display:inline-flex;align-items:center;gap:5px}
+  .dot{width:10px;height:10px;border-radius:50%;display:inline-block}
+  #stats{font-size:13px;line-height:1.7}
+  #stats .k{color:var(--dim)}
+  #log{max-height:420px;overflow-y:auto;font-size:12px;line-height:1.5}
+  #log div{padding:5px 0;border-bottom:1px dashed var(--line);color:var(--dim)}
+  #log div b{color:var(--txt)}
+  details summary{cursor:pointer;font-size:14px;font-weight:600}
+  details p, details li{font-size:12.5px;color:var(--dim);line-height:1.6}
+  details ul{padding-left:18px}
+  @media(max-width:1100px){ main{grid-template-columns:1fr} .charts{grid-template-columns:1fr} }
+</style>
+</head>
+<body>
+<header>
+  <div>
+    <h1>🏘️ Mini Society</h1>
+    <p>A living prisoner's-dilemma world: invites, memory, gossip &amp; social learning. Tweak the parameters, watch behaviors emerge.</p>
+  </div>
+  <div class="presets" id="presets"></div>
+</header>
+<main>
+  <aside>
+    <div class="card">
+      <h2>Simulation</h2>
+      <div class="rowbtns">
+        <button id="btnRun" class="primary">▶ Run</button>
+        <button id="btnPause">⏸ Pause</button>
+        <button id="btnStep">⏭ Step</button>
+        <button id="btnReset">↺ Reset</button>
+      </div>
+      <div class="ctl"><label>Speed <b id="v_speed"></b></label><input type="range" id="speed" min="1" max="50" step="1" value="5"></div>
+      <div class="hint">Tip: change any parameter, then press Reset to start a fresh society with it. Note: strangers start at neutral trust (50%) — a threshold above 50% means nobody ever gets a first chance, and society never forms.</div>
+      <div class="warn" id="pdWarn">⚠ Payoffs are not in T &gt; R &gt; P &gt; S order — this is no longer a prisoner's dilemma.</div>
+    </div>
+    <div class="card"><h2>Parameters</h2><div id="controls"></div></div>
+    <div class="card"><h2>Starting strategy mix (%)</h2><div id="mix"></div><div class="hint">Shares are normalized automatically.</div></div>
+    <div class="card"><h2>Export</h2><div class="rowbtns"><button id="btnCSV">⬇ Download CSV</button></div></div>
+    <details class="card">
+      <summary>How to read this &amp; what to try</summary>
+      <p><b>The model.</b> Every round each person may send invites to others. The invitee checks their memory (plus gossip they've heard) and accepts only if the inviter looks trustworthy enough. Accepted invites become one prisoner's-dilemma game: both secretly choose <i>collaborate</i> or <i>betray</i>.</p>
+      <ul>
+        <li><b>Network:</b> node color = strategy, node size = wealth. Green edge = mutual cooperation, orange = one betrayed, red = mutual betrayal.</li>
+        <li><b>People learn two ways:</b> strategies react to each partner's history (e.g. tit-for-tat retaliates), and people <i>copy the strategy of the most successful person they know about</i> (social learning rate).</li>
+        <li><b>Gossip</b> spreads second-hand reports; <b>trust</b> sets how much weight they carry vs. direct experience.</li>
+      </ul>
+      <p><b>Things to try:</b></p>
+      <ul>
+        <li>Set <i>Memory length</i> and <i>Gossip rate</i> to 0 ("Amnesia" preset) — can cooperation survive when nobody remembers anything?</li>
+        <li>Raise <i>Temptation T</i> — at what point does betrayal become irresistible?</li>
+        <li>Crank <i>Gossip rate</i> + <i>Accept threshold</i> ("Panopticon") — watch defectors get frozen out of all social life.</li>
+        <li>Compare <i>Generous TFT</i> vs <i>Grim</i> populations: which world forgives, which never forgets?</li>
+        <li>Raise <i>Social learning rate</i> — fast imitation spreads the winning strategy like a fashion.</li>
+      </ul>
+    </details>
+  </aside>
+  <section>
+    <div class="card">
+      <h2>Society <span id="roundLabel" style="color:var(--dim);font-weight:400"></span></h2>
+      <canvas id="net"></canvas>
+      <div id="legend"></div>
+    </div>
+    <div class="charts">
+      <div class="card"><h3>Cooperation rate</h3><canvas id="chCoop"></canvas></div>
+      <div class="card"><h3>Strategy shares</h3><canvas id="chShare"></canvas></div>
+      <div class="card"><h3>Avg wealth by strategy</h3><canvas id="chWealth"></canvas></div>
+    </div>
+  </section>
+  <aside>
+    <div class="card"><h2>Stats</h2><div id="stats"></div></div>
+    <div class="card"><h2>Society diary</h2><div id="log"></div></div>
+  </aside>
+</main>
+<script>
+// ====ENGINE-START====
+// Mini-society engine: pairwise prisoner's dilemma with invites, memory, reputation,
+// gossip and social learning. Pure logic — no DOM — so it also runs headless under node.
+'use strict';
+function mulberry32(seed){ let a=(seed>>>0)||1; return function(){ a|=0; a=(a+0x6D2B79F5)|0; let t=Math.imul(a^(a>>>15),1|a); t=(t+Math.imul(t^(t>>>7),61|t))^t; return ((t^(t>>>14))>>>0)/4294967296; }; }
+const STRATEGIES=['ALLC','TFT','GTFT','PAVLOV','GRIM','ALLD','RAND'];
+const STRAT_COLORS={ALLC:'#4ade80',TFT:'#38bdf8',GTFT:'#a78bfa',PAVLOV:'#fbbf24',GRIM:'#fb923c',ALLD:'#ef4444',RAND:'#94a3b8'};
+const STRAT_DESC={ALLC:'Always cooperates',TFT:'Tit-for-tat: copies your last move',GTFT:'Generous tit-for-tat: sometimes forgives a betrayal',PAVLOV:'Win-stay, lose-shift',GRIM:'Cooperates until betrayed once — then defects forever',ALLD:'Always betrays',RAND:'Coin flip'};
+function pdPayoff(ma,mb,P){ if(ma==='C') return mb==='C'?P.R:P.S; return mb==='C'?P.T:P.P; }
+
+class Society{
+  constructor(cfg){
+    this.cfg=Object.assign({},cfg);
+    this.cfg.payoffs=Object.assign({},cfg.payoffs);
+    this.cfg.mix=Object.assign({},cfg.mix);
+    this.rng=mulberry32(this.cfg.seed);
+    this.round=0;
+    this.agents=[];
+    for(let i=0;i<this.cfg.population;i++){
+      this.agents.push({id:i,strategy:this._pickStrategy(),wealth:0,mem:new Map(),gossip:new Map()});
+    }
+    this.stats={coop:[],accept:[],games:[],gossip:[]};
+    for(const s of STRATEGIES){ this.stats['share_'+s]=[]; this.stats['wealth_'+s]=[]; }
+    this.recentGames=[];
+    this.events=[{r:0,t:'A new society of <b>'+this.cfg.population+'</b> people is born.'}];
+    this.totalInvites=0; this.totalAccepts=0; this.totalGames=0; this.totalGossip=0;
+  }
+  _pickStrategy(){
+    const mix=this.cfg.mix, r=this.rng(); let tot=0;
+    for(const s of STRATEGIES) tot+=(mix[s]||0);
+    if(tot<=0) return STRATEGIES[Math.floor(r*STRATEGIES.length)];
+    let acc=0;
+    for(const s of STRATEGIES){ acc+=(mix[s]||0)/tot; if(r<=acc) return s; }
+    return STRATEGIES[STRATEGIES.length-1];
+  }
+  // Estimated probability that `other` will cooperate, from self's point of view.
+  belief(self,other){
+    const M=this.cfg.memory;
+    let c=0,w=0;
+    if(M>0){
+      const d=self.mem.get(other.id);
+      if(d){ const dd=d.slice(-M); for(const r of dd){ if(r.th==='C')c+=1; w+=1; } }
+      const g=self.gossip.get(other.id);
+      if(g){ const gg=g.slice(-M), t=this.cfg.gossipTrust; for(const r of gg){ if(r.a==='C')c+=t; w+=t; } }
+    }
+    return w===0 ? 0.5 : c/w;
+  }
+  choosePartner(a){
+    const n=this.agents.length, rng=this.rng;
+    if(n<2) return null;
+    if(rng()<this.cfg.epsilon) { let b=this.agents[Math.floor(rng()*n)]; return b.id===a.id?null:b; }
+    const order=this.agents.slice();
+    for(let i=order.length-1;i>0;i--){ const j=Math.floor(rng()*(i+1)); const t=order[i]; order[i]=order[j]; order[j]=t; }
+    let best=null,bestB=-1;
+    for(const b of order){ if(b.id===a.id) continue; const bl=this.belief(a,b); if(bl>bestB){ bestB=bl; best=b; } }
+    return best;
+  }
+  decide(a,b){
+    const s=a.strategy, hist=a.mem.get(b.id);
+    const last=(hist&&hist.length)?hist[hist.length-1]:null;
+    switch(s){
+      case 'ALLC': return 'C';
+      case 'ALLD': return 'D';
+      case 'RAND': return this.rng()<0.5?'C':'D';
+      case 'TFT': return last?last.th:'C';
+      case 'GTFT': if(!last||last.th==='C') return 'C'; return this.rng()<this.cfg.forgive?'C':'D';
+      case 'GRIM': if(hist&&hist.some(r=>r.th==='D')) return 'D'; return 'C';
+      case 'PAVLOV': {
+        if(!last) return 'C';
+        const p=pdPayoff(last.my,last.th,this.cfg.payoffs);
+        const win=(p===this.cfg.payoffs.R||p===this.cfg.payoffs.T);
+        return win?last.my:(last.my==='C'?'D':'C');
+      }
+    }
+    return 'C';
+  }
+  _remember(a,b,my,th){
+    let arr=a.mem.get(b.id); if(!arr){ arr=[]; a.mem.set(b.id,arr); }
+    arr.push({my:my,th:th,r:this.round}); if(arr.length>60) arr.shift();
+  }
+  step(){
+    const cfg=this.cfg, rng=this.rng;
+    this.round++;
+    const order=this.agents.slice();
+    for(let i=order.length-1;i>0;i--){ const j=Math.floor(rng()*(i+1)); const t=order[i]; order[i]=order[j]; order[j]=t; }
+    const games=[]; let coopActs=0,acts=0,invites=0,accepts=0;
+    for(const a of order){
+      for(let k=0;k<cfg.invites;k++){
+        const b=this.choosePartner(a);
+        if(!b) continue;
+        invites++;
+        if(this.belief(b,a)>=cfg.acceptThreshold){
+          accepts++;
+          const ma=this.decide(a,b), mb=this.decide(b,a);
+          a.wealth+=pdPayoff(ma,mb,cfg.payoffs);
+          b.wealth+=pdPayoff(mb,ma,cfg.payoffs);
+          this._remember(a,b,ma,mb); this._remember(b,a,mb,ma);
+          if(ma==='C')coopActs++; if(mb==='C')coopActs++; acts+=2;
+          games.push({a:a.id,b:b.id,ma:ma,mb:mb});
+        }
+      }
+    }
+    // Gossip phase: share a remembered experience with a random third party.
+    let goss=0;
+    for(const a of this.agents){
+      if(rng()<cfg.gossip){
+        const keys=Array.from(a.mem.keys());
+        if(keys.length){
+          const jid=keys[Math.floor(rng()*keys.length)];
+          const recs=a.mem.get(jid), rec=recs[recs.length-1];
+          const c=this.agents[Math.floor(rng()*this.agents.length)];
+          if(c.id!==a.id&&c.id!==jid){
+            let arr=c.gossip.get(jid); if(!arr){ arr=[]; c.gossip.set(jid,arr); }
+            arr.push({a:rec.th,r:this.round}); if(arr.length>60) arr.shift();
+            goss++;
+          }
+        }
+      }
+    }
+    // Social learning: imitate the most successful person you know about; occasionally experiment.
+    for(const a of this.agents){
+      if(rng()<cfg.explore){
+        const known=new Set([a.id]);
+        for(const k of a.mem.keys()) known.add(k);
+        for(const k of a.gossip.keys()) known.add(k);
+        let best=a;
+        for(const id of known){ const o=this.agents[id]; if(o&&o.wealth>best.wealth) best=o; }
+        if(best!==a&&best.strategy!==a.strategy){
+          this.events.push({r:this.round,t:'<b>#'+a.id+'</b> switched '+a.strategy+' → '+best.strategy+' (saw #'+best.id+' thriving)'});
+          a.strategy=best.strategy;
+        }
+      }
+      if(rng()<cfg.explore*0.3){
+        const ns=STRATEGIES[Math.floor(rng()*STRATEGIES.length)];
+        if(ns!==a.strategy){ this.events.push({r:this.round,t:'<b>#'+a.id+'</b> experimented with '+ns}); a.strategy=ns; }
+      }
+    }
+    this.recentGames=games;
+    this.totalInvites+=invites; this.totalAccepts+=accepts; this.totalGames+=games.length; this.totalGossip+=goss;
+    this.stats.coop.push(acts?coopActs/acts:0);
+    this.stats.accept.push(invites?accepts/invites:0);
+    this.stats.games.push(games.length);
+    this.stats.gossip.push(goss);
+    const wsum={},wcnt={};
+    for(const s of STRATEGIES){ wsum[s]=0; wcnt[s]=0; this.stats['share_'+s].push(0); }
+    for(const a of this.agents){ this.stats['share_'+a.strategy][this.stats['share_'+a.strategy].length-1]++; wsum[a.strategy]+=a.wealth; wcnt[a.strategy]++; }
+    for(const s of STRATEGIES){
+      this.stats['share_'+s][this.stats['share_'+s].length-1]/=this.agents.length;
+      this.stats['wealth_'+s].push(wcnt[s]?wsum[s]/wcnt[s]:NaN);
+    }
+    if(this.events.length>400) this.events.splice(0,this.events.length-400);
+  }
+  run(n){ for(let i=0;i<n;i++) this.step(); return this; }
+  summary(){
+    const s=this.stats, tail=50;
+    const avg=arr=>{ const d=arr.slice(-tail).filter(x=>!isNaN(x)); return d.length?d.reduce((x,y)=>x+y,0)/d.length:0; };
+    const shares={},wealth={};
+    for(const st of STRATEGIES){ shares[st]=avg(s['share_'+st]); wealth[st]=avg(s['wealth_'+st]); }
+    const dominant=STRATEGIES.reduce((a,b)=>shares[a]>=shares[b]?a:b);
+    return {rounds:this.round,coop:avg(s.coop),accept:avg(s.accept),shares:shares,wealth:wealth,
+            dominant:dominant,totalGames:this.totalGames,totalGossip:this.totalGossip};
+  }
+}
+// ====ENGINE-END====
+</script>
+<script>
+(function(){
+'use strict';
+const $=id=>document.getElementById(id);
+
+// ---------- controls ----------
+const CONTROL_DEFS=[
+  ['seed','Random seed',1,9999,1,7],
+  ['population','Population',10,200,5,60],
+  ['rounds','Rounds',50,2000,50,400],
+  ['invites','Invites per round (per person)',1,5,1,3],
+  ['payT','Temptation T — you betray, they cooperate',0,10,0.5,5],
+  ['payR','Reward R — both cooperate',0,10,0.5,3],
+  ['payP','Punishment P — both betray',0,10,0.5,1],
+  ['payS',"Sucker's payoff S — you cooperate, they betray",-5,5,0.5,0],
+  ['memory','Memory length (interactions remembered)',0,30,1,10],
+  ['gossip','Gossip rate (chance/person/round)',0,1,0.05,0.3],
+  ['gossipTrust','Gossip trust (weight vs direct experience)',0,1,0.05,0.5],
+  ['acceptThreshold','Invite accept threshold (min trust)',0,1,0.05,0.35],
+  ['explore','Social learning rate (imitate the thriving)',0,0.2,0.005,0.02],
+  ['forgive','Forgiveness (generous tit-for-tat)',0,1,0.05,0.3],
+  ['epsilon','Partner exploration (random invites)',0,0.5,0.05,0.15],
+];
+const MIX_DEF={ALLC:10,TFT:25,GTFT:15,PAVLOV:15,GRIM:10,ALLD:15,RAND:10};
+
+function buildControls(){
+  const host=$('controls');
+  for(const [id,label,min,max,step,def] of CONTROL_DEFS){
+    const div=document.createElement('div'); div.className='ctl';
+    div.innerHTML='<label>'+label+' <b id="v_'+id+'"></b></label>'+
+      '<input type="range" id="'+id+'" min="'+min+'" max="'+max+'" step="'+step+'" value="'+def+'">';
+    host.appendChild(div);
+    const inp=$(''+id), lab=$('v_'+id);
+    const upd=()=>{ lab.textContent=inp.value; checkPD(); };
+    inp.addEventListener('input',upd); upd();
+  }
+  const sp=document.createElement('div'); sp.className='ctl';
+  sp.innerHTML='<label>Speed (rounds per tick) <b id="v_speed"></b></label><input type="range" id="speed" min="1" max="50" step="1" value="5">';
+  $('btnRun').parentElement.parentElement.appendChild(sp);
+  const sinp=$('speed'), slab=$('v_speed');
+  sinp.addEventListener('input',()=>slab.textContent=sinp.value); slab.textContent=sinp.value;
+  const mh=$('mix');
+  for(const s of STRATEGIES){
+    const div=document.createElement('div'); div.className='ctl';
+    div.innerHTML='<label><span><span class="dot" style="background:'+STRAT_COLORS[s]+'"></span> '+s+
+      ' <span class="hint">— '+STRAT_DESC[s]+'</span></span><b id="v_mix_'+s+'"></b></label>'+
+      '<input type="range" id="mix_'+s+'" min="0" max="100" step="1" value="'+MIX_DEF[s]+'">';
+    mh.appendChild(div);
+    const inp=$('mix_'+s), lab=$('v_mix_'+s);
+    inp.addEventListener('input',()=>lab.textContent=inp.value+'%'); lab.textContent=inp.value+'%';
+  }
+  const lg=$('legend');
+  lg.innerHTML=STRATEGIES.map(s=>'<span><span class="dot" style="background:'+STRAT_COLORS[s]+'"></span>'+s+'</span>').join('');
+}
+function checkPD(){
+  const T=+$('payT').value,R=+$('payR').value,P=+$('payP').value,S=+$('payS').value;
+  $('pdWarn').style.display=(T>R&&R>P&&P>S)?'none':'block';
+}
+function readConfig(){
+  const v=id=>parseFloat($(id).value);
+  const mix={}; let tot=0;
+  for(const s of STRATEGIES){ const x=parseFloat($('mix_'+s).value); mix[s]=x; tot+=x; }
+  if(tot<=0){ for(const s of STRATEGIES) mix[s]=1/STRATEGIES.length; }
+  else for(const s of STRATEGIES) mix[s]/=tot;
+  return {
+    seed:Math.round(v('seed')), population:Math.round(v('population')), rounds:Math.round(v('rounds')),
+    invites:Math.round(v('invites')),
+    payoffs:{T:v('payT'),R:v('payR'),P:v('payP'),S:v('payS')},
+    memory:Math.round(v('memory')), gossip:v('gossip'), gossipTrust:v('gossipTrust'),
+    acceptThreshold:v('acceptThreshold'), explore:v('explore'), forgive:v('forgive'), epsilon:v('epsilon'),
+    mix:mix
+  };
+}
+function applyConfig(c){
+  const set=(id,val)=>{ $(id).value=val; $('v_'+id).textContent=val; };
+  set('seed',c.seed); set('population',c.population); set('rounds',c.rounds); set('invites',c.invites);
+  set('payT',c.payoffs.T); set('payR',c.payoffs.R); set('payP',c.payoffs.P); set('payS',c.payoffs.S);
+  set('memory',c.memory); set('gossip',c.gossip); set('gossipTrust',c.gossipTrust);
+  set('acceptThreshold',c.acceptThreshold); set('explore',c.explore); set('forgive',c.forgive); set('epsilon',c.epsilon);
+  for(const s of STRATEGIES){ $('mix_'+s).value=Math.round(c.mix[s]*100); $('v_mix_'+s).textContent=Math.round(c.mix[s]*100)+'%'; }
+  checkPD();
+}
+
+// ---------- presets ----------
+function baseCfg(over){
+  const c=readConfig();
+  const d={seed:7,population:60,rounds:400,invites:3,payoffs:{T:5,R:3,P:1,S:0},
+    memory:10,gossip:0.3,gossipTrust:0.5,acceptThreshold:0.35,explore:0.02,forgive:0.3,epsilon:0.15,
+    mix:{ALLC:.10,TFT:.25,GTFT:.15,PAVLOV:.15,GRIM:.10,ALLD:.15,RAND:.10}};
+  const m=Object.assign({},d,over||{});
+  if(over&&over.mix) m.mix=over.mix; if(over&&over.payoffs) m.payoffs=over.payoffs;
+  return m;
+}
+const PRESETS={
+  'Baseline':{},
+  'Trusting world':{mix:{ALLC:.35,TFT:.25,GTFT:.20,PAVLOV:.10,GRIM:.05,ALLD:.03,RAND:.02},gossip:.4,acceptThreshold:.3},
+  'Defector invasion':{mix:{ALLC:.10,TFT:.15,GTFT:.10,PAVLOV:.10,GRIM:.05,ALLD:.40,RAND:.10}},
+  'Amnesia':{memory:0,gossip:0,acceptThreshold:0,mix:{ALLC:.15,TFT:.20,GTFT:.10,PAVLOV:.15,GRIM:.10,ALLD:.20,RAND:.10}},
+  'Gossip panopticon':{gossip:.9,gossipTrust:.8,memory:20,acceptThreshold:.5},
+  'Forgiving':{mix:{ALLC:.10,TFT:.20,GTFT:.30,PAVLOV:.30,GRIM:.05,ALLD:.03,RAND:.02},forgive:.6},
+  'Fast learners':{explore:.08},
+};
+function buildPresets(){
+  const host=$('presets');
+  for(const name of Object.keys(PRESETS)){
+    const b=document.createElement('button'); b.textContent=name;
+    b.title='Load the "'+name+'" scenario';
+    b.addEventListener('click',()=>{ applyConfig(baseCfg(PRESETS[name])); resetSim(); });
+    host.appendChild(b);
+  }
+}
+
+// ---------- simulation control ----------
+let sim=null, playing=false, timer=null;
+let mileHigh=false, mileLow=false;
+
+function resetSim(){
+  pause();
+  sim=new Society(readConfig());
+  mileHigh=false; mileLow=false;
+  draw();
+}
+function tick(){
+  if(!sim) return;
+  const per=+$('speed').value;
+  const target=Math.min(sim.round+per, sim.cfg.rounds);
+  while(sim.round<target) sim.step();
+  milestones();
+  draw();
+  if(sim.round>=sim.cfg.rounds) pause();
+}
+function play(){ if(playing||!sim) return; playing=true; timer=setInterval(tick,120);
+  $('btnRun').disabled=true; $('btnPause').disabled=false; }
+function pause(){ playing=false; if(timer){clearInterval(timer);timer=null;}
+  $('btnRun').disabled=false; $('btnPause').disabled=true; }
+function avgLast(arr,n){ const d=arr.slice(-n); return d.length?d.reduce((a,b)=>a+b,0)/d.length:0; }
+function milestones(){
+  const c=avgLast(sim.stats.coop,50);
+  if(!mileHigh&&sim.round>60&&c>=0.75){ mileHigh=true; sim.events.push({r:sim.round,t:'🌸 Cooperation is flourishing — <b>'+Math.round(c*100)+'%</b> of moves are cooperative.'}); }
+  if(!mileLow&&sim.round>60&&c<=0.25){ mileLow=true; sim.events.push({r:sim.round,t:'🥀 Trust has collapsed — only <b>'+Math.round(c*100)+'%</b> cooperation.'}); }
+}
+
+// ---------- drawing ----------
+function setupCanvas(cv,h){
+  const dpr=window.devicePixelRatio||1, w=cv.clientWidth;
+  cv.width=Math.max(50,w*dpr); cv.height=h*dpr;
+  const ctx=cv.getContext('2d'); ctx.setTransform(dpr,0,0,dpr,0,0);
+  ctx.clearRect(0,0,w,h);
+  return [ctx,w,h];
+}
+function axes(ctx,w,h,pad,ymin,ymax,fmt){
+  ctx.strokeStyle='#1e2a45'; ctx.fillStyle='#8ea0c2'; ctx.font='10px system-ui'; ctx.lineWidth=1;
+  const steps=4;
+  for(let i=0;i<=steps;i++){
+    const v=ymin+(ymax-ymin)*i/steps, y=pad.t+(h-pad.t-pad.b)*(1-i/steps);
+    ctx.beginPath(); ctx.moveTo(pad.l,y); ctx.lineTo(w-pad.r,y); ctx.stroke();
+    ctx.fillText(fmt(v),4,y+3);
+  }
+}
+function drawCoop(){
+  const [ctx,w,h]=setupCanvas($('chCoop'),150), pad={l:40,r:8,t:8,b:18};
+  axes(ctx,w,h,pad,0,1,v=>Math.round(v*100)+'%');
+  const d=sim.stats.coop, n=d.length; if(!n) return;
+  ctx.strokeStyle='#4ade80'; ctx.lineWidth=2; ctx.beginPath();
+  const X=i=>pad.l+(w-pad.l-pad.r)*(n===1?0:i/(Math.max(1,sim.cfg.rounds-1)));
+  d.forEach((v,i)=>{ const x=X(i),y=pad.t+(h-pad.t-pad.b)*(1-v); i?ctx.lineTo(x,y):ctx.moveTo(x,y); });
+  ctx.stroke();
+}
+function drawShares(){
+  const [ctx,w,h]=setupCanvas($('chShare'),150), pad={l:40,r:8,t:8,b:18};
+  axes(ctx,w,h,pad,0,1,v=>Math.round(v*100)+'%');
+  const n=sim.round; if(!n) return;
+  const X=i=>pad.l+(w-pad.l-pad.r)*(n===1?0:i/(Math.max(1,sim.cfg.rounds-1)));
+  const base=new Array(n).fill(0);
+  for(const s of STRATEGIES){
+    const d=sim.stats['share_'+s];
+    ctx.fillStyle=STRAT_COLORS[s]; ctx.globalAlpha=0.85; ctx.beginPath();
+    let first=true;
+    for(let i=0;i<n;i++){ const x=X(i),y=pad.t+(h-pad.t-pad.b)*(1-(base[i]+d[i])); first?ctx.moveTo(x,y):ctx.lineTo(x,y); first=false; }
+    for(let i=n-1;i>=0;i--){ const x=X(i),y=pad.t+(h-pad.t-pad.b)*(1-base[i]); ctx.lineTo(x,y); }
+    ctx.closePath(); ctx.fill();
+    for(let i=0;i<n;i++) base[i]+=d[i];
+  }
+  ctx.globalAlpha=1;
+}
+function drawWealth(){
+  const [ctx,w,h]=setupCanvas($('chWealth'),150), pad={l:44,r:8,t:8,b:18};
+  let mn=Infinity,mx=-Infinity;
+  for(const s of STRATEGIES) for(const v of sim.stats['wealth_'+s]){ if(isNaN(v))continue; if(v<mn)mn=v; if(v>mx)mx=v; }
+  if(!isFinite(mn)){ mn=0; mx=1; } if(mx-mn<1e-9){ mx=mn+1; }
+  axes(ctx,w,h,pad,mn,mx,v=>Math.round(v));
+  const n=sim.round; if(!n) return;
+  const X=i=>pad.l+(w-pad.l-pad.r)*(n===1?0:i/(Math.max(1,sim.cfg.rounds-1)));
+  const Y=v=>pad.t+(h-pad.t-pad.b)*(1-(v-mn)/(mx-mn));
+  for(const s of STRATEGIES){
+    const d=sim.stats['wealth_'+s];
+    ctx.strokeStyle=STRAT_COLORS[s]; ctx.lineWidth=1.6; ctx.beginPath();
+    let started=false;
+    for(let i=0;i<n;i++){ const v=d[i]; if(isNaN(v))continue; const x=X(i),y=Y(v); started?ctx.lineTo(x,y):ctx.moveTo(x,y); started=true; }
+    ctx.stroke();
+  }
+}
+function drawNet(){
+  const [ctx,w,h]=setupCanvas($('net'),380);
+  const cx=w/2, cy=h/2, R=Math.min(w,h)/2-28, N=sim.agents.length;
+  const pos=sim.agents.map((a,i)=>{ const t=2*Math.PI*i/N-Math.PI/2; return [cx+R*Math.cos(t),cy+R*Math.sin(t)]; });
+  // edges: last round's games
+  for(const g of sim.recentGames){
+    const p1=pos[g.a],p2=pos[g.b]; if(!p1||!p2) continue;
+    ctx.strokeStyle=(g.ma==='C'&&g.mb==='C')?'rgba(34,197,94,0.45)':((g.ma==='D'&&g.mb==='D')?'rgba(239,68,68,0.45)':'rgba(245,158,11,0.5)');
+    ctx.lineWidth=1; ctx.beginPath(); ctx.moveTo(p1[0],p1[1]); ctx.lineTo(p2[0],p2[1]); ctx.stroke();
+  }
+  let mn=Infinity,mx=-Infinity;
+  for(const a of sim.agents){ if(a.wealth<mn)mn=a.wealth; if(a.wealth>mx)mx=a.wealth; }
+  sim.agents.forEach((a,i)=>{
+    const r=4+9*((a.wealth-mn)/Math.max(1,mx-mn));
+    ctx.fillStyle=STRAT_COLORS[a.strategy];
+    ctx.beginPath(); ctx.arc(pos[i][0],pos[i][1],r,0,7); ctx.fill();
+    ctx.strokeStyle='#0b1020'; ctx.lineWidth=2; ctx.stroke();
+  });
+}
+function drawStats(){
+  const s=sim.summary();
+  const counts={}; for(const x of STRATEGIES) counts[x]=0;
+  for(const a of sim.agents) counts[a.strategy]++;
+  let rich=sim.agents[0]; for(const a of sim.agents) if(a.wealth>rich.wealth) rich=a;
+  const topStrat=STRATEGIES.slice().sort((a,b)=>counts[b]-counts[a]).slice(0,3)
+    .map(x=>'<span class="dot" style="background:'+STRAT_COLORS[x]+'"></span> '+x+' '+counts[x]).join(' · ');
+  $('stats').innerHTML=
+    '<div><span class="k">Round:</span> <b>'+sim.round+'</b> / '+sim.cfg.rounds+'</div>'+
+    '<div><span class="k">Cooperation (last 50):</span> <b>'+Math.round(s.coop*100)+'%</b></div>'+
+    '<div><span class="k">Invites accepted:</span> <b>'+Math.round(s.accept*100)+'%</b></div>'+
+    '<div><span class="k">Games played:</span> '+s.totalGames.toLocaleString()+' &nbsp; <span class="k">Gossip shared:</span> '+s.totalGossip.toLocaleString()+'</div>'+
+    '<div><span class="k">Top strategies:</span> '+topStrat+'</div>'+
+    '<div><span class="k">Richest:</span> <b>#'+rich.id+'</b> ('+rich.strategy+', wealth '+Math.round(rich.wealth)+')</div>'+
+    '<div><span class="k">Avg wealth TFT vs ALLD:</span> '+(isNaN(s.wealth.TFT)?'—':Math.round(s.wealth.TFT))+' vs '+(isNaN(s.wealth.ALLD)?'—':Math.round(s.wealth.ALLD))+'</div>';
+  $('roundLabel').textContent='— round '+sim.round+' of '+sim.cfg.rounds;
+}
+function drawLog(){
+  $('log').innerHTML=sim.events.slice(-25).reverse().map(e=>'<div><b>r'+e.r+'</b> · '+e.t+'</div>').join('');
+}
+function draw(){ if(!sim) return; drawNet(); drawCoop(); drawShares(); drawWealth(); drawStats(); drawLog(); }
+
+// ---------- export ----------
+function exportCSV(){
+  if(!sim) return;
+  const head=['round','coopRate','acceptRate','games','gossip']
+    .concat(STRATEGIES.map(s=>'share_'+s)).concat(STRATEGIES.map(s=>'wealth_'+s));
+  const rows=[head.join(',')];
+  for(let i=0;i<sim.round;i++){
+    const r=[i+1,sim.stats.coop[i].toFixed(4),sim.stats.accept[i].toFixed(4),sim.stats.games[i],sim.stats.gossip[i]];
+    for(const s of STRATEGIES) r.push(sim.stats['share_'+s][i].toFixed(4));
+    for(const s of STRATEGIES){ const v=sim.stats['wealth_'+s][i]; r.push(isNaN(v)?'':v.toFixed(2)); }
+    rows.push(r.join(','));
+  }
+  const blob=new Blob([rows.join('\n')],{type:'text/csv'});
+  const a=document.createElement('a'); a.href=URL.createObjectURL(blob);
+  a.download='mini-society-seed'+sim.cfg.seed+'.csv'; a.click();
+  setTimeout(()=>URL.revokeObjectURL(a.href),2000);
+}
+
+// ---------- init ----------
+buildControls(); buildPresets();
+$('btnRun').addEventListener('click',play);
+$('btnPause').addEventListener('click',pause);
+$('btnPause').disabled=true;
+$('btnStep').addEventListener('click',()=>{ pause(); if(sim&&sim.round<sim.cfg.rounds){ sim.step(); milestones(); draw(); } });
+$('btnReset').addEventListener('click',resetSim);
+$('btnCSV').addEventListener('click',exportCSV);
+window.addEventListener('resize',()=>draw());
+resetSim();
+})();
+</script>
+</body>
+</html>
